@@ -3,6 +3,8 @@ import { ShoppingBag, Package, Truck, Heart, FileText, Receipt, TrendingUp, Cloc
 import { EstablishmentResponse } from '../../api/establishment'
 import clsx from 'clsx'
 import DocumentsPage from './DocumentsPage'
+import SuppliersPage from './SuppliersPage'
+import InvoicesPage from './InvoicesPage'
 
 interface BarPageProps {
   establishment: EstablishmentResponse
@@ -36,13 +38,7 @@ export default function BarPage({ establishment }: BarPageProps) {
       case 'documents':
         return <DocumentsPage establishment={establishment} />
       case 'suppliers':
-        return (
-          <div className="bg-white/10 backdrop-blur-lg rounded-ios-lg p-8 text-center border border-white/20">
-            <Users className="w-16 h-16 text-white/40 mx-auto mb-4" />
-            <h3 className="text-lg font-semibold text-white mb-2">Поставщики</h3>
-            <p className="text-white/60">Раздел в разработке</p>
-          </div>
-        )
+        return <SuppliersPage />
       case 'stock':
         return (
           <div className="bg-white/10 backdrop-blur-lg rounded-ios-lg p-8 text-center border border-white/20">
@@ -84,13 +80,7 @@ export default function BarPage({ establishment }: BarPageProps) {
           </div>
         )
       case 'invoices':
-        return (
-          <div className="bg-white/10 backdrop-blur-lg rounded-ios-lg p-8 text-center border border-white/20">
-            <FileText className="w-16 h-16 text-white/40 mx-auto mb-4" />
-            <h3 className="text-lg font-semibold text-white mb-2">Счета</h3>
-            <p className="text-white/60">Раздел в разработке</p>
-          </div>
-        )
+        return <InvoicesPage />
       case 'analytics':
         return (
           <div className="bg-white/10 backdrop-blur-lg rounded-ios-lg p-8 text-center border border-white/20">
@@ -127,7 +117,7 @@ export default function BarPage({ establishment }: BarPageProps) {
   }
 
   return (
-    <div className="flex gap-6">
+    <div className="flex gap-6 justify-start">
       {/* Левая панель навигации */}
       <div className="w-64 flex-shrink-0">
         <div className="bg-white/10 backdrop-blur-lg rounded-ios-lg border border-white/20 p-4">
@@ -170,11 +160,6 @@ export default function BarPage({ establishment }: BarPageProps) {
 
       {/* Основной контент */}
       <div className="flex-1 space-y-6">
-        <div className="flex items-center gap-3 mb-6">
-          <ShoppingBag className="w-6 h-6 text-cyan-400" />
-          <h1 className="text-2xl font-semibold text-white">Мой кабинет</h1>
-        </div>
-
         {renderContent()}
       </div>
     </div>

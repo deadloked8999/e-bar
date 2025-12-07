@@ -1,6 +1,5 @@
 import { Building, CheckCircle, Clock, FileText } from 'lucide-react'
 import { EstablishmentResponse } from '../../api/establishment'
-import { DigitALCLogo } from '../DigitALCLogo'
 
 interface HomePageProps {
   establishment: EstablishmentResponse
@@ -10,18 +9,15 @@ export default function HomePage({ establishment }: HomePageProps) {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between mb-8">
-        <div className="flex items-center gap-3">
-          <DigitALCLogo />
-          <div>
-            <h1 className="text-2xl font-semibold text-white">Добро пожаловать!</h1>
-            <p className="text-cyan-300 text-sm">{establishment.business_name}</p>
-          </div>
+      <div className="flex items-center justify-center mb-8">
+        <div className="text-center">
+          <h1 className="text-2xl font-semibold text-white">Добро пожаловать!</h1>
+          <p className="text-cyan-300 text-sm">{establishment.business_name}</p>
         </div>
       </div>
 
       {/* Info Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 justify-start">
         <div className="bg-white/10 backdrop-blur-lg rounded-ios-lg p-6 border border-white/20">
           <div className="flex items-center gap-3 mb-4">
             <Building className="w-6 h-6 text-cyan-400" />

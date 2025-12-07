@@ -100,6 +100,29 @@ export default function ProfilePage({ establishment, onUpdate }: ProfilePageProp
     handleChange(field, formatted)
   }
 
+  const formatWebsite = (value: string) => {
+    if (!value) return ''
+    
+    // Убираем пробелы
+    value = value.trim()
+    
+    // Если пусто, возвращаем пустую строку
+    if (!value) return ''
+    
+    // Если уже есть протокол, возвращаем как есть
+    if (value.startsWith('http://') || value.startsWith('https://')) {
+      return value
+    }
+    
+    // Если нет протокола, добавляем https://
+    return `https://${value}`
+  }
+
+  const handleWebsiteChange = (value: string) => {
+    const formatted = formatWebsite(value)
+    handleChange('website', formatted)
+  }
+
   const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
@@ -206,7 +229,7 @@ export default function ProfilePage({ establishment, onUpdate }: ProfilePageProp
   }
 
   return (
-    <div className="flex justify-center">
+    <div className="flex justify-start">
       <div className="space-y-6 max-w-[50%] w-full">
         <div className="flex items-center gap-3 mb-6">
           <User className="w-6 h-6 text-cyan-400" />
@@ -459,8 +482,15 @@ export default function ProfilePage({ establishment, onUpdate }: ProfilePageProp
               <input
                 type="url"
                 value={formData.website || ''}
-                onChange={(e) => handleChange('website', e.target.value)}
-                placeholder="https://example.com"
+                onChange={(e) => handleWebsiteChange(e.target.value)}
+                onBlur={(e) => {
+                  // При потере фокуса форматируем URL
+                  const formatted = formatWebsite(e.target.value)
+                  if (formatted !== e.target.value) {
+                    handleChange('website', formatted)
+                  }
+                }}
+                placeholder="example.com или https://example.com"
                 className="w-full px-3 py-2 text-sm border border-white/20 rounded-ios-lg outline-none transition-all bg-white/5 text-white placeholder-white/50 focus:ring-2 focus:ring-cyan-400/50 focus:border-cyan-400"
               />
             </div>

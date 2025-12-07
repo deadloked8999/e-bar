@@ -26,9 +26,23 @@ function App() {
         setEstablishmentId(id)
         // Загружаем данные заведения из БД
         establishmentApi.getEstablishment(id)
-          .then(data => {
+          .then(async (data) => {
             setEstablishmentData(data)
-            setCurrentPage('main')
+            // Проверяем, загружены ли все документы
+            try {
+              const docs = await documentsApi.getDocuments(id)
+              // Проверяем, что все обязательные документы загружены
+              const allDocsUploaded = docs.length > 0 && docs.every(doc => doc.uploaded && doc.file_name)
+              
+              if (allDocsUploaded) {
+                setCurrentPage('dashboard')
+              } else {
+                setCurrentPage('main')
+              }
+            } catch {
+              // Если ошибка при загрузке документов, переходим на страницу загрузки
+              setCurrentPage('main')
+            }
           })
           .catch(() => {
             // Если заведение не найдено, очищаем localStorage

@@ -86,14 +86,14 @@ export default function DocumentsPage({ establishment }: DocumentsPageProps) {
   }
 
   return (
-    <div className="flex gap-6">
+    <div className="flex gap-6 justify-start">
       {/* Блоки документов слева */}
       <div className="flex-1 space-y-2 max-w-[50%]">
         {/* Информация о заведении сверху */}
         <div className="bg-white/10 backdrop-blur-lg rounded-ios-lg p-4 border border-white/20 mb-2">
           <div className="flex items-center gap-3 mb-3">
             <Building className="w-5 h-5 text-cyan-400" />
-            <h3 className="text-base font-semibold text-white">Информация о заведении</h3>
+            <h3 className="text-base font-semibold text-white">Информация ООО ХАСТЛЕР</h3>
           </div>
           <div className="space-y-1.5 text-xs">
             <div>
@@ -104,9 +104,39 @@ export default function DocumentsPage({ establishment }: DocumentsPageProps) {
                 {establishment.business_name}
               </p>
             </div>
-            <p className="text-white/80">
-              <span className="text-cyan-300">Адрес:</span> {establishment.address}
-            </p>
+            {establishment.name && (
+              <p className="text-white/80">
+                <span className="text-cyan-300">Имя:</span> {establishment.name}
+              </p>
+            )}
+            {establishment.address && (
+              <p className="text-white/80">
+                <span className="text-cyan-300">Адрес:</span> {establishment.address}
+              </p>
+            )}
+            {(establishment as any).business_phone && (
+              <p className="text-white/80">
+                <span className="text-cyan-300">Телефон организации:</span> {(establishment as any).business_phone}
+              </p>
+            )}
+            {(establishment as any).website && (
+              <p className="text-white/80">
+                <span className="text-cyan-300">Сайт:</span>{' '}
+                <a 
+                  href={(establishment as any).website} 
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                  className="text-cyan-400 hover:text-cyan-300 underline transition-colors"
+                >
+                  {(establishment as any).website}
+                </a>
+              </p>
+            )}
+            {establishment.email && (
+              <p className="text-white/80">
+                <span className="text-cyan-300">Email:</span> {establishment.email}
+              </p>
+            )}
             <p className="text-white/80">
               <span className="text-cyan-300">ИНН:</span> {establishment.inn}
             </p>

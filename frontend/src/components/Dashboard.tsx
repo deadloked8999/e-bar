@@ -3,6 +3,7 @@ import { AnimatePresence, motion } from 'framer-motion'
 import { Home, FileText, ShoppingBag, ShoppingCart, LogOut, X, User } from 'lucide-react'
 import { EstablishmentResponse } from '../api/establishment'
 import clsx from 'clsx'
+import { DigitALCLogo } from './DigitALCLogo'
 
 // Страницы
 import HomePage from './pages/HomePage'
@@ -80,38 +81,47 @@ export default function Dashboard({ establishment, onLogout, onEstablishmentUpda
   return (
     <div className="min-h-screen font-sf pb-20">
       {/* Header with Logo, Business Name and Logout */}
-      <div className="container mx-auto px-4 pt-6 max-w-7xl">
-        <div className="flex items-center justify-between mb-4">
-          <div className="flex items-center gap-3">
-            {/* Логотип компании */}
-            {establishmentData && (establishmentData as any).logo_path && (
-              <img 
-                src={(() => {
-                  const logoPath = (establishmentData as any).logo_path
-                  if (!logoPath) return ''
-                  if (logoPath.startsWith('data:') || logoPath.startsWith('http')) return logoPath
-                  const normalizedPath = logoPath.replace(/\\/g, '/')
-                  if (normalizedPath.includes('uploads/logos/')) {
-                    return `/api/uploads/logos/${normalizedPath.split('logos/')[1]}`
-                  }
-                  return `/api/uploads/logos/${normalizedPath.split('/').pop()}`
-                })()}
-                alt="Логотип компании" 
-                className="w-12 h-12 object-cover rounded-ios-lg border border-white/20"
-                onError={(e) => {
-                  // Скрываем логотип при ошибке загрузки
-                  (e.target as HTMLImageElement).style.display = 'none'
-                }}
-              />
-            )}
-            {/* Название заведения */}
-            <div>
-              <h2 className="text-lg font-semibold text-white">{establishmentData.business_name}</h2>
-              {!showProfile && (
-                <p className="text-xs text-cyan-400/80">Страница {currentPageNumber} из {totalPages}</p>
+      <div className="pt-6 pl-[1cm] pr-[1cm]">
+        <div className="flex items-center justify-between mb-4 relative">
+          <div className="flex flex-col gap-3">
+            {/* Логотип DigitALC (сверху) */}
+            <DigitALCLogo />
+            {/* Логотип заведения и название (под DigitALC) */}
+            <div className="flex items-center gap-3">
+              {establishmentData && (establishmentData as any).logo_path && (
+                <img 
+                  src={(() => {
+                    const logoPath = (establishmentData as any).logo_path
+                    if (!logoPath) return ''
+                    if (logoPath.startsWith('data:') || logoPath.startsWith('http')) return logoPath
+                    const normalizedPath = logoPath.replace(/\\/g, '/')
+                    if (normalizedPath.includes('uploads/logos/')) {
+                      return `/api/uploads/logos/${normalizedPath.split('logos/')[1]}`
+                    }
+                    return `/api/uploads/logos/${normalizedPath.split('/').pop()}`
+                  })()}
+                  alt="Логотип компании" 
+                  className="w-12 h-12 object-cover rounded-ios-lg border border-white/20"
+                  onError={(e) => {
+                    // Скрываем логотип при ошибке загрузки
+                    (e.target as HTMLImageElement).style.display = 'none'
+                  }}
+                />
               )}
+              {/* Название заведения */}
+              <div>
+                <h2 className="text-lg font-semibold text-white">{establishmentData.business_name}</h2>
+              </div>
             </div>
           </div>
+          
+          {/* Надпись "Мой кабинет" по центру (только для вкладки "Мой кабинет") */}
+          {activeTab === 'bar' && !showProfile && (
+            <div className="absolute left-1/2 -translate-x-1/2">
+              <h1 className="text-2xl font-semibold text-white">Мой кабинет</h1>
+            </div>
+          )}
+          
           <div className="flex items-center gap-2">
             <button
               onClick={() => setShowProfile(!showProfile)}
@@ -137,7 +147,7 @@ export default function Dashboard({ establishment, onLogout, onEstablishmentUpda
       </div>
 
       {/* Main Content */}
-      <div className="container mx-auto px-4 py-6 max-w-7xl">
+      <div className="py-6 pl-[1cm] pr-[1cm]">
         {renderPage()}
       </div>
 
