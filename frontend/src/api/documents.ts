@@ -48,5 +48,22 @@ export const documentsApi = {
     })
     return response.data
   },
+
+  async updateDocumentStatus(
+    id: number,
+    verification_status?: string,
+    expiry_date?: string
+  ): Promise<Document> {
+    const formData = new FormData()
+    if (verification_status) {
+      formData.append('verification_status', verification_status)
+    }
+    if (expiry_date) {
+      formData.append('expiry_date', expiry_date)
+    }
+
+    const response = await axios.put(`${API_BASE_URL}/documents/${id}/status`, formData)
+    return response.data
+  },
 }
 

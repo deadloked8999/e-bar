@@ -1,4 +1,5 @@
 export type DocumentStatus = 'pending' | 'verified' | 'rejected'
+export type VerificationStatus = 'verified' | 'update_required' | 'update_by_date' | 'invalid'
 
 export interface Document {
   id: number
@@ -11,6 +12,8 @@ export interface Document {
   required: boolean
   uploaded: boolean
   status: DocumentStatus
+  verification_status?: VerificationStatus
+  expiry_date?: string | null
   uploaded_at: string | null
   created_at: string
 }

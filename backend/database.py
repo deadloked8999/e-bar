@@ -54,6 +54,8 @@ class Document(Base):
     required = Column(Boolean, default=False)
     uploaded = Column(Boolean, default=False)
     status = Column(String, default="pending")  # pending, verified, rejected
+    verification_status = Column(String, default="verified")  # verified, update_required, update_by_date, invalid
+    expiry_date = Column(DateTime, nullable=True)  # Дата окончания действия документа
     uploaded_at = Column(DateTime)
     created_at = Column(DateTime, default=datetime.utcnow)
 

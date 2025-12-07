@@ -80,6 +80,8 @@ class DocumentResponse(BaseModel):
     required: bool
     uploaded: bool
     status: str
+    verification_status: Optional[str] = "verified"  # verified, update_required, update_by_date, invalid
+    expiry_date: Optional[datetime] = None  # Дата окончания действия документа
     uploaded_at: Optional[datetime] = None
     created_at: datetime
 

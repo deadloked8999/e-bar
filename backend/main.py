@@ -37,6 +37,8 @@ def document_to_response(doc: Document) -> DocumentResponse:
             required=doc.required,
             uploaded=doc.uploaded,
             status=doc.status,
+            verification_status=getattr(doc, 'verification_status', 'verified'),
+            expiry_date=getattr(doc, 'expiry_date', None),
             uploaded_at=doc.uploaded_at,
             created_at=doc.created_at
         )
@@ -262,6 +264,32 @@ async def verify_document(doc_id: int, status: DocumentStatus = Form(...), db: S
         raise HTTPException(status_code=404, detail="Document not found")
     
     document.status = status.value
+    db.commit()
+    db.refresh(document)
+    
+    return document_to_response(document)
+
+@app.put("/api/documents/{doc_id}/status")
+async def update_document_status(
+    doc_id: int,
+    verification_status: Optional[str] = Form(None),
+    expiry_date: Optional[str] = Form(None),
+    db: Session = Depends(get_db)
+):
+    """Обновить статус верификации документа и дату окончания"""
+    document = db.query(Document).filter(Document.id == doc_id).first()
+    if not document:
+        raise HTTPException(status_code=404, detail="Document not found")
+    
+    if verification_status:
+        document.verification_status = verification_status
+    
+    if expiry_date:
+        try:
+            document.expiry_date = datetime.fromisoformat(expiry_date.replace('Z', '+00:00'))
+        except:
+            document.expiry_date = datetime.fromisoformat(expiry_date)
+    
     db.commit()
     db.refresh(document)
     

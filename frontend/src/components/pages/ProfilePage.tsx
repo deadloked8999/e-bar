@@ -229,8 +229,8 @@ export default function ProfilePage({ establishment, onUpdate }: ProfilePageProp
   }
 
   return (
-    <div className="flex justify-start">
-      <div className="space-y-6 max-w-[50%] w-full">
+    <div className="flex justify-center">
+      <div className="space-y-6 max-w-[35%] w-full">
         <div className="flex items-center gap-3 mb-6">
           <User className="w-6 h-6 text-cyan-400" />
           <h1 className="text-2xl font-semibold text-white">Мой профиль</h1>
