@@ -11,6 +11,7 @@ from pydantic import BaseModel
 from enum import Enum
 from sqlalchemy.orm import Session
 from sqlalchemy import or_
+from dotenv import load_dotenv
 from database import get_db, Establishment, Document, init_db
 from schemas import EstablishmentCreate, EstablishmentResponse, EstablishmentUpdate, DocumentResponse, EstablishmentRegistrationResponse
 from auth_utils import hash_password, verify_password
@@ -18,6 +19,9 @@ from auth import create_access_token, get_current_establishment
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
+
+# Загружаем переменные окружения из .env файла
+load_dotenv()
 
 # Инициализируем БД при запуске
 init_db()
@@ -77,10 +81,21 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
         content={"detail": exc.errors(), "body": str(await request.body())}
     )
 
-# CORS для локальной разработки
+# CORS настройки из переменных окружения
+# Читаем разрешенные origins из переменной окружения
+ALLOWED_ORIGINS = os.getenv(
+    "ALLOWED_ORIGINS",
+    "http://localhost:5173,http://localhost:3000"  # По умолчанию для разработки
+).split(",")
+
+# Очищаем пробелы в origins
+ALLOWED_ORIGINS = [origin.strip() for origin in ALLOWED_ORIGINS if origin.strip()]
+
+print(f"[CORS] Разрешенные origins: {ALLOWED_ORIGINS}")
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://localhost:3000"],
+    allow_origins=ALLOWED_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -443,8 +458,19 @@ async def create_establishment(establishment: EstablishmentCreate, db: Session =
         raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
 
 @app.get("/api/establishments/{establishment_id}", response_model=EstablishmentResponse)
-async def get_establishment(establishment_id: int, db: Session = Depends(get_db)):
-    """Получить заведение по ID"""
+async def get_establishment(
+    establishment_id: int,
+    current_establishment: Establishment = Depends(get_current_establishment),
+    db: Session = Depends(get_db)
+):
+    """Получить заведение по ID (требует авторизации)"""
+    # Проверяем что пользователь запрашивает свои данные
+    if current_establishment.id != establishment_id:
+        raise HTTPException(
+            status_code=403,
+            detail="You can only access your own establishment data"
+        )
+    
     establishment = db.query(Establishment).filter(Establishment.id == establishment_id).first()
     if not establishment:
         raise HTTPException(status_code=404, detail="Establishment not found")

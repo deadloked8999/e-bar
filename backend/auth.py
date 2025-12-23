@@ -5,9 +5,14 @@ from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.orm import Session
 from database import get_db, Establishment
+import os
+from dotenv import load_dotenv
 
-# Секретный ключ для подписи JWT (в продакшене должен быть в переменных окружения)
-SECRET_KEY = "your-secret-key-change-in-production"
+# Загружаем переменные окружения
+load_dotenv()
+
+# Секретный ключ для подписи JWT из переменных окружения
+SECRET_KEY = os.getenv("SECRET_KEY", "your-secret-key-change-in-production")
 ALGORITHM = "HS256"
 
 # Срок жизни токена - 7 дней для тестирования
@@ -61,15 +66,30 @@ def get_current_establishment(
     )
     
     try:
+        # Декодируем токен с проверкой всех ошибок
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
         establishment_id: str = payload.get("sub")
+        
         if establishment_id is None:
             raise credentials_exception
+        
+        # Проверяем что establishment_id можно преобразовать в int
+        try:
+            establishment_id_int = int(establishment_id)
+        except (ValueError, TypeError):
+            raise credentials_exception
+        
     except JWTError:
+        # Любая JWT ошибка (невалидный токен, истекший, неправильный формат и т.д.)
+        raise credentials_exception
+    except Exception as e:
+        # Любая другая неожиданная ошибка
+        print(f"Unexpected error in get_current_establishment: {e}")
         raise credentials_exception
     
+    # Ищем пользователя в БД
     establishment = db.query(Establishment).filter(
-        Establishment.id == int(establishment_id)
+        Establishment.id == establishment_id_int
     ).first()
     
     if establishment is None:
