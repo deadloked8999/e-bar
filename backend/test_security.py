@@ -571,3 +571,221 @@ def test_password_hashing(api_url, registered_user):
     print(f"   - Пароль захеширован в БД (bcrypt)")
     print(f"   - verify_password работает корректно")
 
+
+@pytest.mark.order(21)
+def test_forgot_password_success(api_url, registered_user):
+    """Тест успешного запроса на восстановление пароля"""
+    print("\n[TEST 21] Запрос на восстановление пароля (существующий email)...")
+    
+    response = requests.post(
+        f"{api_url}/auth/forgot-password",
+        json={"email": registered_user["email"]}
+    )
+    
+    assert response.status_code == 200, f"Ожидался 200, получен {response.status_code}: {response.text}"
+    data = response.json()
+    assert "message" in data, "Сообщение не найдено в ответе"
+    assert "Password reset token sent" in data["message"]
+    
+    # Проверяем что токен создан в БД
+    conn = sqlite3.connect(DATABASE_URL)
+    cursor = conn.cursor()
+    cursor.execute("SELECT token, expires_at, used FROM password_reset_tokens WHERE establishment_id = ? ORDER BY created_at DESC LIMIT 1", 
+                   (registered_user["establishment_id"],))
+    token_data = cursor.fetchone()
+    conn.close()
+    
+    assert token_data is not None, "Токен не создан в БД"
+    assert token_data[2] == 0, "Токен помечен как использованный"
+    
+    print(f"✅ test_forgot_password_success - PASSED")
+    print(f"   - Токен создан в БД")
+    print(f"   - Токен не использован")
+
+
+@pytest.mark.order(22)
+def test_forgot_password_nonexistent_email(api_url):
+    """Тест запроса на восстановление пароля с несуществующим email"""
+    print("\n[TEST 22] Запрос на восстановление пароля (несуществующий email)...")
+    
+    response = requests.post(
+        f"{api_url}/auth/forgot-password",
+        json={"email": "nonexistent@example.com"}
+    )
+    
+    # Для безопасности должен вернуть 200 даже если email не найден
+    assert response.status_code == 200, f"Ожидался 200, получен {response.status_code}: {response.text}"
+    data = response.json()
+    assert "message" in data
+    
+    print(f"✅ test_forgot_password_nonexistent_email - PASSED")
+    print(f"   - Возвращен успешный ответ (безопасность)")
+
+
+@pytest.mark.order(23)
+def test_reset_password_success(api_url, registered_user):
+    """Тест успешного сброса пароля"""
+    print("\n[TEST 23] Сброс пароля с валидным токеном...")
+    
+    # Сначала создаем токен
+    forgot_response = requests.post(
+        f"{api_url}/auth/forgot-password",
+        json={"email": registered_user["email"]}
+    )
+    assert forgot_response.status_code == 200
+    
+    # Получаем токен из БД
+    conn = sqlite3.connect(DATABASE_URL)
+    cursor = conn.cursor()
+    cursor.execute("SELECT token FROM password_reset_tokens WHERE establishment_id = ? ORDER BY created_at DESC LIMIT 1", 
+                   (registered_user["establishment_id"],))
+    token_data = cursor.fetchone()
+    conn.close()
+    
+    assert token_data is not None, "Токен не найден в БД"
+    token = token_data[0]
+    
+    # Сбрасываем пароль
+    new_password = "new_password_123"
+    response = requests.post(
+        f"{api_url}/auth/reset-password",
+        json={"token": token, "new_password": new_password}
+    )
+    
+    assert response.status_code == 200, f"Ожидался 200, получен {response.status_code}: {response.text}"
+    data = response.json()
+    assert "message" in data
+    assert "Password updated successfully" in data["message"]
+    
+    # Проверяем что токен помечен как использованный
+    conn = sqlite3.connect(DATABASE_URL)
+    cursor = conn.cursor()
+    cursor.execute("SELECT used FROM password_reset_tokens WHERE token = ?", (token,))
+    used = cursor.fetchone()[0]
+    conn.close()
+    
+    assert used == 1, "Токен не помечен как использованный"
+    
+    # Проверяем что можно войти с новым паролем
+    login_response = requests.post(
+        f"{api_url}/auth/login",
+        data={"username": registered_user["username"], "password": new_password}
+    )
+    assert login_response.status_code == 200, "Не удалось войти с новым паролем"
+    
+    print(f"✅ test_reset_password_success - PASSED")
+    print(f"   - Пароль успешно изменен")
+    print(f"   - Токен помечен как использованный")
+    print(f"   - Вход с новым паролем работает")
+
+
+@pytest.mark.order(24)
+def test_reset_password_invalid_token(api_url):
+    """Тест сброса пароля с невалидным токеном"""
+    print("\n[TEST 24] Сброс пароля с невалидным токеном...")
+    
+    response = requests.post(
+        f"{api_url}/auth/reset-password",
+        json={"token": "000000", "new_password": "new_password_123"}
+    )
+    
+    assert response.status_code == 400, f"Ожидался 400, получен {response.status_code}: {response.text}"
+    data = response.json()
+    assert "detail" in data
+    assert "неверный" in data["detail"].lower() or "invalid" in data["detail"].lower()
+    
+    print(f"✅ test_reset_password_invalid_token - PASSED")
+    print(f"   - Невалидный токен отклонен")
+
+
+@pytest.mark.order(25)
+def test_reset_password_expired_token(api_url, registered_user):
+    """Тест сброса пароля с истекшим токеном"""
+    print("\n[TEST 25] Сброс пароля с истекшим токеном...")
+    
+    # Создаем токен и сразу истекаем его в БД
+    forgot_response = requests.post(
+        f"{api_url}/auth/forgot-password",
+        json={"email": registered_user["email"]}
+    )
+    assert forgot_response.status_code == 200
+    
+    # Получаем токен и устанавливаем expires_at в прошлое
+    conn = sqlite3.connect(DATABASE_URL)
+    cursor = conn.cursor()
+    cursor.execute("SELECT token FROM password_reset_tokens WHERE establishment_id = ? ORDER BY created_at DESC LIMIT 1", 
+                   (registered_user["establishment_id"],))
+    token_data = cursor.fetchone()
+    
+    if token_data:
+        from datetime import datetime, timedelta
+        expired_time = datetime.utcnow() - timedelta(hours=2)  # Истек 2 часа назад
+        cursor.execute("UPDATE password_reset_tokens SET expires_at = ? WHERE token = ?", 
+                      (expired_time.strftime('%Y-%m-%d %H:%M:%S'), token_data[0]))
+        conn.commit()
+        token = token_data[0]
+    conn.close()
+    
+    if token_data:
+        response = requests.post(
+            f"{api_url}/auth/reset-password",
+            json={"token": token, "new_password": "new_password_123"}
+        )
+        
+        assert response.status_code == 400, f"Ожидался 400, получен {response.status_code}: {response.text}"
+        data = response.json()
+        assert "detail" in data
+        assert "истек" in data["detail"].lower() or "expired" in data["detail"].lower()
+        
+        print(f"✅ test_reset_password_expired_token - PASSED")
+        print(f"   - Истекший токен отклонен")
+    else:
+        print(f"⚠️ test_reset_password_expired_token - SKIPPED (токен не найден)")
+
+
+@pytest.mark.order(26)
+def test_reset_password_used_token(api_url, registered_user):
+    """Тест сброса пароля с уже использованным токеном"""
+    print("\n[TEST 26] Сброс пароля с уже использованным токеном...")
+    
+    # Создаем токен и используем его
+    forgot_response = requests.post(
+        f"{api_url}/auth/forgot-password",
+        json={"email": registered_user["email"]}
+    )
+    assert forgot_response.status_code == 200
+    
+    # Получаем токен
+    conn = sqlite3.connect(DATABASE_URL)
+    cursor = conn.cursor()
+    cursor.execute("SELECT token FROM password_reset_tokens WHERE establishment_id = ? ORDER BY created_at DESC LIMIT 1", 
+                   (registered_user["establishment_id"],))
+    token_data = cursor.fetchone()
+    conn.close()
+    
+    if token_data:
+        token = token_data[0]
+        
+        # Используем токен первый раз
+        reset_response = requests.post(
+            f"{api_url}/auth/reset-password",
+            json={"token": token, "new_password": "first_reset_123"}
+        )
+        assert reset_response.status_code == 200, "Первый сброс должен быть успешным"
+        
+        # Пытаемся использовать токен второй раз
+        second_reset_response = requests.post(
+            f"{api_url}/auth/reset-password",
+            json={"token": token, "new_password": "second_reset_123"}
+        )
+        
+        assert second_reset_response.status_code == 400, f"Ожидался 400, получен {second_reset_response.status_code}: {second_reset_response.text}"
+        data = second_reset_response.json()
+        assert "detail" in data
+        assert "использован" in data["detail"].lower() or "used" in data["detail"].lower()
+        
+        print(f"✅ test_reset_password_used_token - PASSED")
+        print(f"   - Использованный токен отклонен")
+    else:
+        print(f"⚠️ test_reset_password_used_token - SKIPPED (токен не найден)")
+

@@ -62,6 +62,19 @@ class Document(Base):
     establishment = relationship("Establishment", back_populates="documents")
 
 
+class PasswordResetToken(Base):
+    __tablename__ = "password_reset_tokens"
+
+    id = Column(Integer, primary_key=True, index=True)
+    token = Column(String, nullable=False, unique=True, index=True)  # Уникальный токен (6 цифр или UUID)
+    establishment_id = Column(Integer, ForeignKey("establishments.id"), nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    expires_at = Column(DateTime, nullable=False)  # Токен живет 1 час
+    used = Column(Boolean, default=False, nullable=False)  # Использован ли токен
+
+    establishment = relationship("Establishment")
+
+
 # Создаем таблицы при импорте
 def init_db():
     Base.metadata.create_all(bind=engine)

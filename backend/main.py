@@ -5,15 +5,20 @@ from fastapi.exceptions import RequestValidationError
 from typing import Optional, List
 import os
 import shutil
-from datetime import datetime
+from datetime import datetime, timedelta
 import uuid
+import random
 from pydantic import BaseModel
 from enum import Enum
 from sqlalchemy.orm import Session
 from sqlalchemy import or_
 from dotenv import load_dotenv
-from database import get_db, Establishment, Document, init_db
-from schemas import EstablishmentCreate, EstablishmentResponse, EstablishmentUpdate, DocumentResponse, EstablishmentRegistrationResponse
+from database import get_db, Establishment, Document, PasswordResetToken, init_db
+from schemas import (
+    EstablishmentCreate, EstablishmentResponse, EstablishmentUpdate, DocumentResponse, 
+    EstablishmentRegistrationResponse, ForgotPasswordRequest, ForgotPasswordResponse,
+    ResetPasswordRequest, ResetPasswordResponse
+)
 from auth_utils import hash_password, verify_password
 from auth import create_access_token, get_current_establishment
 from slowapi import Limiter
@@ -623,6 +628,148 @@ async def login(
         print(traceback.format_exc())
         print("=" * 50)
         raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
+
+
+@app.post("/api/auth/forgot-password", response_model=ForgotPasswordResponse)
+async def forgot_password(
+    request_data: ForgotPasswordRequest,
+    db: Session = Depends(get_db)
+):
+    """Запрос на восстановление пароля - генерирует токен и выводит в консоль"""
+    try:
+        # Ищем пользователя по email
+        establishment = db.query(Establishment).filter(
+            Establishment.email == request_data.email
+        ).first()
+        
+        if not establishment:
+            # Для безопасности не сообщаем, что email не найден
+            # Просто возвращаем успешный ответ
+            return ForgotPasswordResponse(message="Password reset token sent")
+        
+        # Генерируем случайный токен из 6 цифр
+        import random
+        token = ''.join([str(random.randint(0, 9)) for _ in range(6)])
+        
+        # Проверяем уникальность токена (на случай коллизии)
+        while db.query(PasswordResetToken).filter(PasswordResetToken.token == token).first():
+            token = ''.join([str(random.randint(0, 9)) for _ in range(6)])
+        
+        # Создаем токен с временем жизни 1 час
+        from datetime import timedelta
+        expires_at = datetime.utcnow() + timedelta(hours=1)
+        
+        reset_token = PasswordResetToken(
+            token=token,
+            establishment_id=establishment.id,
+            expires_at=expires_at,
+            used=False
+        )
+        
+        db.add(reset_token)
+        db.commit()
+        db.refresh(reset_token)
+        
+        # ВЫВОДИМ ТОКЕН В КОНСОЛЬ (для тестирования, потом заменим на отправку email)
+        print("=" * 50)
+        print("PASSWORD RESET TOKEN:")
+        print(f"Email: {request_data.email}")
+        print(f"Token: {token}")
+        print(f"Expires at: {expires_at}")
+        print("=" * 50)
+        
+        return ForgotPasswordResponse(message="Password reset token sent")
+        
+    except Exception as e:
+        import traceback
+        print("=" * 50)
+        print("ERROR IN FORGOT PASSWORD:")
+        print(f"Error: {str(e)}")
+        print(traceback.format_exc())
+        print("=" * 50)
+        db.rollback()
+        # Для безопасности возвращаем успешный ответ даже при ошибке
+        return ForgotPasswordResponse(message="Password reset token sent")
+
+
+@app.post("/api/auth/reset-password", response_model=ResetPasswordResponse)
+async def reset_password(
+    request_data: ResetPasswordRequest,
+    db: Session = Depends(get_db)
+):
+    """Сброс пароля по токену"""
+    try:
+        # Валидация нового пароля
+        if len(request_data.new_password) < 6:
+            raise HTTPException(
+                status_code=400,
+                detail="Пароль должен быть не менее 6 символов"
+            )
+        
+        # Ищем токен
+        reset_token = db.query(PasswordResetToken).filter(
+            PasswordResetToken.token == request_data.token
+        ).first()
+        
+        if not reset_token:
+            raise HTTPException(
+                status_code=400,
+                detail="Неверный или недействительный токен"
+            )
+        
+        # Проверяем что токен не использован
+        if reset_token.used:
+            raise HTTPException(
+                status_code=400,
+                detail="Токен уже использован"
+            )
+        
+        # Проверяем что токен не истек
+        if datetime.utcnow() > reset_token.expires_at:
+            raise HTTPException(
+                status_code=400,
+                detail="Токен истек. Запросите новый токен"
+            )
+        
+        # Находим пользователя
+        establishment = db.query(Establishment).filter(
+            Establishment.id == reset_token.establishment_id
+        ).first()
+        
+        if not establishment:
+            raise HTTPException(
+                status_code=404,
+                detail="Пользователь не найден"
+            )
+        
+        # Хешируем новый пароль
+        hashed_password = hash_password(request_data.new_password)
+        
+        # Обновляем пароль
+        establishment.password = hashed_password
+        establishment.updated_at = datetime.utcnow()
+        
+        # Помечаем токен как использованный
+        reset_token.used = True
+        
+        db.commit()
+        
+        print(f"Password reset successful for establishment_id: {establishment.id}")
+        
+        return ResetPasswordResponse(message="Password updated successfully")
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        import traceback
+        print("=" * 50)
+        print("ERROR IN RESET PASSWORD:")
+        print(f"Error: {str(e)}")
+        print(traceback.format_exc())
+        print("=" * 50)
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
+
 
 @app.post("/api/establishments/{establishment_id}/documents/upload")
 async def upload_registration_document(
