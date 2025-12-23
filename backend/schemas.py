@@ -69,6 +69,13 @@ class EstablishmentResponse(BaseModel):
         from_attributes = True
 
 
+class EstablishmentRegistrationResponse(BaseModel):
+    """Ответ при регистрации - включает заведение и токен"""
+    establishment: EstablishmentResponse
+    access_token: str
+    token_type: str = "bearer"
+
+
 class DocumentResponse(BaseModel):
     id: int
     establishment_id: int

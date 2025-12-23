@@ -12,7 +12,12 @@ from enum import Enum
 from sqlalchemy.orm import Session
 from sqlalchemy import or_
 from database import get_db, Establishment, Document, init_db
-from schemas import EstablishmentCreate, EstablishmentResponse, EstablishmentUpdate, DocumentResponse
+from schemas import EstablishmentCreate, EstablishmentResponse, EstablishmentUpdate, DocumentResponse, EstablishmentRegistrationResponse
+from auth_utils import hash_password, verify_password
+from auth import create_access_token, get_current_establishment
+from slowapi import Limiter
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
 
 # Инициализируем БД при запуске
 init_db()
@@ -44,6 +49,18 @@ def document_to_response(doc: Document) -> DocumentResponse:
         )
 
 app = FastAPI(title="E-Bar Document Management System")
+
+# Инициализация rate limiter
+limiter = Limiter(key_func=get_remote_address)
+app.state.limiter = limiter
+
+# Кастомный обработчик для RateLimitExceeded
+@app.exception_handler(RateLimitExceeded)
+async def rate_limit_handler(request: Request, exc: RateLimitExceeded):
+    return JSONResponse(
+        status_code=429,
+        content={"detail": "Слишком много попыток входа. Попробуйте через минуту"}
+    )
 
 # Обработчик ошибок валидации
 @app.exception_handler(RequestValidationError)
@@ -122,6 +139,7 @@ async def upload_document(
     file: UploadFile = File(...),
     document_type: str = Form(...),
     establishment_id: int = Form(...),
+    current_establishment: Establishment = Depends(get_current_establishment),
     db: Session = Depends(get_db)
 ):
     """Загрузка документа"""
@@ -132,6 +150,10 @@ async def upload_document(
         print(f"Document type: {document_type}")
         print(f"Establishment ID: {establishment_id}")
         print("=" * 50)
+        
+        # Проверяем права доступа - пользователь может загружать документы только для себя
+        if current_establishment.id != establishment_id:
+            raise HTTPException(status_code=403, detail="Forbidden: You can only upload documents for your own establishment")
         
         # Проверяем существование заведения
         establishment = db.query(Establishment).filter(Establishment.id == establishment_id).first()
@@ -296,11 +318,19 @@ async def update_document_status(
     return document_to_response(document)
 
 @app.delete("/api/documents/{doc_id}")
-async def delete_document(doc_id: int, db: Session = Depends(get_db)):
+async def delete_document(
+    doc_id: int,
+    current_establishment: Establishment = Depends(get_current_establishment),
+    db: Session = Depends(get_db)
+):
     """Удалить документ"""
     document = db.query(Document).filter(Document.id == doc_id).first()
     if not document:
         raise HTTPException(status_code=404, detail="Document not found")
+    
+    # Проверяем права доступа - пользователь может удалять только свои документы
+    if current_establishment.id != document.establishment_id:
+        raise HTTPException(status_code=403, detail="Forbidden: You can only delete your own documents")
     
     # Удаляем файл
     if document.file_path and os.path.exists(document.file_path):
@@ -332,9 +362,9 @@ async def get_statistics(establishment_id: int = None, db: Session = Depends(get
 
 # ============ REGISTRATION ENDPOINTS ============
 
-@app.post("/api/establishments", response_model=EstablishmentResponse)
+@app.post("/api/establishments", response_model=EstablishmentRegistrationResponse)
 async def create_establishment(establishment: EstablishmentCreate, db: Session = Depends(get_db)):
-    """Создание нового заведения (регистрация пользователя)"""
+    """Создание нового заведения (регистрация пользователя) с автоматическим логином"""
     try:
         print("=" * 50)
         print("CREATE ESTABLISHMENT REQUEST:")
@@ -370,6 +400,11 @@ async def create_establishment(establishment: EstablishmentCreate, db: Session =
             print(f"ERROR: Missing fields in dict: {missing_fields}")
             raise HTTPException(status_code=400, detail=f"Missing required fields: {', '.join(missing_fields)}")
         
+        # Хешируем пароль перед сохранением
+        if 'password' in establishment_dict:
+            establishment_dict['password'] = hash_password(establishment_dict['password'])
+            print("Password hashed successfully")
+        
         try:
             db_establishment = Establishment(**establishment_dict)
         except Exception as db_error:
@@ -383,9 +418,18 @@ async def create_establishment(establishment: EstablishmentCreate, db: Session =
         db.refresh(db_establishment)
         
         print(f"Establishment created successfully with ID: {db_establishment.id}")
+        
+        # Создаем JWT токен для автоматического логина
+        access_token = create_access_token(db_establishment.id)
+        print(f"Access token created for establishment {db_establishment.id}")
         print("=" * 50)
         
-        return db_establishment
+        # Возвращаем заведение и токен
+        return EstablishmentRegistrationResponse(
+            establishment=EstablishmentResponse.model_validate(db_establishment, from_attributes=True),
+            access_token=access_token,
+            token_type="bearer"
+        )
     except HTTPException:
         raise
     except Exception as e:
@@ -410,9 +454,14 @@ async def get_establishment(establishment_id: int, db: Session = Depends(get_db)
 async def upload_logo(
     establishment_id: int,
     file: UploadFile = File(...),
+    current_establishment: Establishment = Depends(get_current_establishment),
     db: Session = Depends(get_db)
 ):
     """Загрузить логотип компании"""
+    # Проверяем права доступа - пользователь может загружать логотип только для себя
+    if current_establishment.id != establishment_id:
+        raise HTTPException(status_code=403, detail="Forbidden: You can only upload logo for your own establishment")
+    
     # Проверяем существование заведения
     establishment = db.query(Establishment).filter(Establishment.id == establishment_id).first()
     if not establishment:
@@ -458,10 +507,15 @@ async def upload_logo(
 async def update_establishment(
     establishment_id: int, 
     update_data: EstablishmentUpdate,
+    current_establishment: Establishment = Depends(get_current_establishment),
     db: Session = Depends(get_db)
 ):
     """Обновить данные заведения"""
     try:
+        # Проверяем права доступа - пользователь может обновлять только свои данные
+        if current_establishment.id != establishment_id:
+            raise HTTPException(status_code=403, detail="Forbidden: You can only update your own establishment data")
+        
         establishment = db.query(Establishment).filter(Establishment.id == establishment_id).first()
         if not establishment:
             raise HTTPException(status_code=404, detail="Establishment not found")
@@ -490,7 +544,13 @@ async def update_establishment(
         raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
 
 @app.post("/api/auth/login")
-async def login(username: str = Form(...), password: str = Form(...), db: Session = Depends(get_db)):
+@limiter.limit("5/minute")
+async def login(
+    request: Request,
+    username: str = Form(...), 
+    password: str = Form(...), 
+    db: Session = Depends(get_db)
+):
     """Авторизация пользователя по логину или email и паролю"""
     try:
         print("=" * 50)
@@ -510,16 +570,23 @@ async def login(username: str = Form(...), password: str = Form(...), db: Sessio
             print(f"User not found: {username}")
             raise HTTPException(status_code=401, detail="Неверный логин или пароль")
         
-        # Проверяем пароль (в продакшене должен быть хеширован)
-        if establishment.password != password:
+        # Проверяем пароль используя verify_password
+        if not verify_password(password, establishment.password):
             print(f"Invalid password for user: {username}")
             raise HTTPException(status_code=401, detail="Неверный логин или пароль")
         
         print(f"Login successful for user: {username}, establishment_id: {establishment.id}")
         print("=" * 50)
         
-        # Возвращаем данные заведения (без пароля)
-        return EstablishmentResponse.model_validate(establishment)
+        # Создаем JWT токен
+        access_token = create_access_token(establishment.id)
+        
+        # Возвращаем данные заведения и токен
+        return {
+            "establishment": EstablishmentResponse.model_validate(establishment),
+            "access_token": access_token,
+            "token_type": "bearer"
+        }
     except HTTPException:
         raise
     except Exception as e:
@@ -584,9 +651,14 @@ async def upload_registration_document(
 async def delete_registration_document(
     establishment_id: int,
     document_id: int,
+    current_establishment: Establishment = Depends(get_current_establishment),
     db: Session = Depends(get_db)
 ):
     """Удалить документ при регистрации"""
+    # Проверяем права доступа - пользователь может удалять документы только для себя
+    if current_establishment.id != establishment_id:
+        raise HTTPException(status_code=403, detail="Forbidden: You can only delete documents for your own establishment")
+    
     document = db.query(Document).filter(
         Document.id == document_id,
         Document.establishment_id == establishment_id

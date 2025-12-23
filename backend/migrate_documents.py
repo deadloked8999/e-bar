@@ -50,3 +50,7 @@ def migrate_documents_table():
 if __name__ == "__main__":
     migrate_documents_table()
 
+
+
+
+

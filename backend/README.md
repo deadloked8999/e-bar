@@ -66,3 +66,7 @@ API будет доступно по адресу: http://localhost:8000
 - `DELETE /api/documents/{id}` - Удалить документ
 - `GET /api/documents/stats` - Статистика по документам
 
+
+
+
+
